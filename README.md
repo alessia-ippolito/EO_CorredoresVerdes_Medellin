@@ -148,11 +148,11 @@ Output maps and figures will be saved to `outputs/figures/`.
 
 | Metric | Value |
 |---|---|
-| SVM Cross-Val Accuracy (Medellín) | — |
-| SVM Accuracy on Bogotá (generalization) | — |
-| Vegetation gain (city-wide, before→after) | — km² |
-| Vegetation gain inside corridors | — km² |
-| Mean LST change (city-wide) | — °C |
+| SVM Cross-Val Accuracy (Medellín) | 0.975 |
+| SVM Accuracy on Bogotá (generalization) | 0.935 |
+| Vegetation gain (city-wide, before→after) | 83.76 km² |
+| Vegetation gain inside corridors | 12.75 km² |
+| Mean LST change (city-wide) | -5.11 °C |
 
 *Results will be filled in after running the pipeline.*
 
