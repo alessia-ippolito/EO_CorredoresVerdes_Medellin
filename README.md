@@ -172,14 +172,6 @@ Output maps and figures will be saved to `outputs/figures/`.
 
 ---
 
-## 📄 Citation
-
-If you use this code or methodology, please cite the accompanying article:
-
-> [Author(s)]. *Assessing the Impact of Urban Reforestation on Land Cover and Land Surface Temperature in Medellín, Colombia*. [Journal/Conference], [Year].
-
----
-
 ## 📬 Contact
 
 Feel free to open an issue or reach out if you have questions about the methodology or data.
