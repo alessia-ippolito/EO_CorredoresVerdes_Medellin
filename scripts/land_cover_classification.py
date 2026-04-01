@@ -75,8 +75,10 @@ print("=" * 80)
 print("DATASET OVERVIEW")
 print("=" * 80)
 print(f"Shape           : {df.shape}")
-print(f"\nClass distribution:\n{df['LC'].value_counts()}")
-print(f"\nClass percentages:\n{df['LC'].value_counts(normalize=True) * 100:.2f}")
+counts = df['LC'].value_counts()
+percentages = (df['LC'].value_counts(normalize=True) * 100).round(2)
+print(f"\nClass distribution:\n{counts.to_string()}")
+print(f"\nClass percentages (%):\n{percentages.to_string()}")
 
 # =============================================================================
 # 2. OUTLIER DETECTION AND REMOVAL
@@ -132,6 +134,7 @@ sns.heatmap(
 )
 plt.title("Correlation Matrix – All Features", fontsize=16, pad=20)
 plt.tight_layout()
+os.makedirs(os.path.join("outputs", "figures"), exist_ok=True)
 plt.savefig("outputs/figures/correlation_heatmap.png", dpi=300, bbox_inches="tight")
 plt.show()
 
@@ -273,6 +276,62 @@ for data, name in datasets:
     cov, occ, tot = calculate_spatial_coverage(data, n_bins=10)
     print(f"{name:<20s} | {occ}/{tot} cells ({cov:.1f}%)")
 
+# ==============================================================================
+# SPATIAL SAMPLING SELECTION – Coefficient of Variation (CV)
+# ==============================================================================
+# CV = std_nearest_neighbor / mean_nearest_neighbor
+# Lower CV → more spatially uniform distribution → preferred for ML training
+
+def calculate_uniformity_metrics(df):
+    """Calcola metriche di uniformità spaziale"""
+    
+    coords = df[['longitude', 'latitude']].values
+    
+    # Nearest Neighbor Distance (media)
+    distances = distance_matrix(coords, coords)
+    np.fill_diagonal(distances, np.inf)
+    nn_distances = np.min(distances, axis=1)
+    mean_nn = np.mean(nn_distances)
+    std_nn = np.std(nn_distances)
+    
+    # Coefficiente di variazione (lower = più uniforme)
+    cv = std_nn / mean_nn
+    
+    return {
+        'mean_nearest_neighbor': mean_nn,
+        'std_nearest_neighbor': std_nn,
+        'coefficient_of_variation': cv
+    }
+
+print(f"\n{'Method':<20s} | {'Mean NN Dist':<14s} | {'Std NN Dist':<13s} | {'CV':<8s}")
+print("-" * 62)
+
+cv_scores = {}
+for data, name in datasets:
+    metrics = calculate_uniformity_metrics(data)
+    cv = metrics['coefficient_of_variation']
+    cv_scores[name] = cv
+    print(f"{name:<20s} | {metrics['mean_nearest_neighbor']:.6f}       | "
+          f"{metrics['std_nearest_neighbor']:.6f}      | {cv:.4f}")
+
+# Select the method with the lowest CV (most uniform spatial distribution)
+best_method_name = min(cv_scores, key=cv_scores.get)
+best_cv = cv_scores[best_method_name]
+
+print(f"\n→ Best spatial sampling method: '{best_method_name}' (CV = {best_cv:.4f})")
+print("  (lowest CV = most spatially uniform distribution)")
+
+# Map the selected method name to the corresponding DataFrame
+method_to_df = {
+    "Original"    : df_clean_rf,
+    "Grid-based"  : df_grid,
+    "K-Means"     : df_kmeans,
+    "Min-Distance": df_mindist,
+}
+df_selected = method_to_df[best_method_name]
+print(f"  Selected dataset shape: {df_selected.shape}")
+print(f"  Class distribution:\n{df_selected['LC'].value_counts()}")
+
 # =============================================================================
 # 5. RANDOM FOREST – SEQUENTIAL FEATURE SELECTION + HYPERPARAMETER TUNING
 # =============================================================================
@@ -310,8 +369,8 @@ else:
     print(f"RF best features (Forward Selection): {best_features_overall}")
 
 # Spatial sampling with the best RF features
-X_rf = df_mindist[best_features_overall].values
-y_rf = df_mindist["LC"].values
+X_rf = df_selected[best_features_overall].values
+y_rf = df_selected["LC"].values
 X_train_rf, X_test_rf, y_train_rf, y_test_rf = train_test_split(
     X_rf, y_rf, test_size=0.3, random_state=42, stratify=y_rf
 )
@@ -377,7 +436,7 @@ else:
     print(f"\nSVM best features (Forward Selection): {best_features_overall_svm}")
 
 # Retain only the min-distance spatial subset for SVM training
-df_mindist_svm = df_clean_svm[df_clean_svm["ID"].isin(df_mindist["ID"])]
+df_mindist_svm = df_clean_svm[df_clean_svm["ID"].isin(df_selected["ID"])]
 X_svm_md = df_mindist_svm[best_features_overall_svm].values
 y_svm_md = df_mindist_svm["LC"].values
 X_train_sm, X_test_sm, y_train_sm, y_test_sm = train_test_split(
@@ -416,11 +475,16 @@ print(classification_report(y_svm_md, y_pred_cv_svm, digits=3))
 # 7. GENERALISATION TEST ON BOGOTÁ (independent city, different geography)
 # =============================================================================
 
-df_bogota = pd.read_csv("Bogota_Test_Optimal.csv")
+df_bogota = pd.read_csv("data/Bogota_Test_Optimal.csv")
 df_bogota["ID"] = df_bogota.index + 1
+df_coordinates_Bogota = df_bogota[["ID", "latitude", "longitude"]]
 
 outliers_bogota = detect_outliers_zscore(df_bogota, feature_cols, threshold=4)
 df_clean_bogota = df_bogota[~outliers_bogota][feature_cols_corrected + ["LC", "ID"]]
+
+if "longitude" not in df_clean_bogota.columns:
+    # Merge coordinates back (they were dropped when selecting only feature columns)
+    df_clean_bogota = df_clean_bogota.merge(df_coordinates_Bogota, on="ID", how="left")
 
 df_grid_bogota  = grid_based_sampling(df_clean_bogota, grid_size=15, samples_per_cell=2)
 X_bogota        = df_grid_bogota[best_features_overall_svm].values
@@ -434,7 +498,7 @@ print("\nSVM – Bogotá Generalisation Test:")
 print(classification_report(y_bogota, y_pred_bogota, digits=3))
 
 # =============================================================================
-# 8. FULL-IMAGE CLASSIFICATION (Medellín – before / 2020 / after)
+# 8. FULL-IMAGE CLASSIFICATION (Medellín – before / after)
 # =============================================================================
 
 def classify_raster(input_tif: str, output_tif: str, selected_features: list,
@@ -580,11 +644,9 @@ def calc_class_areas(raster_path: str, assume_nodata=None) -> pd.DataFrame:
 
 # -- Classify all three epochs ---
 print("\nClassifying Medellín images...")
-classify_raster("S2_Medellin_Texture_before.tif", "Classified_SVM_before.tif",
+classify_raster("data/S2_Medellin_Texture_before.tif", "Classified_SVM_before.tif",
                 best_features_overall_svm, feature_cols, best_svm, scaler_robust)
-classify_raster("S2_Medellin_Texture_20.tif",     "Classified_SVM_20.tif",
-                best_features_overall_svm, feature_cols, best_svm, scaler_robust)
-classify_raster("S2_Medellin_Texture_after.tif",  "Classified_SVM_after.tif",
+classify_raster("data/S2_Medellin_Texture_after.tif",  "Classified_SVM_after.tif",
                 best_features_overall_svm, feature_cols, best_svm, scaler_robust)
 
 # Reproject to EPSG:3116 for metric area calculations
