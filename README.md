@@ -33,11 +33,10 @@ medellin-green-corridors/
 │   ├── land_cover_classification.py   # Main Python pipeline (ML + change detection)
 │   └── gee_data_export.js             # Google Earth Engine data preparation script
 │
-├── data/
-│   ├── raw/           # Input data (see Data section below)
-│   └── processed/     # Intermediate vector layers (corridors, AOI)
+├── data/        # Input data (see Data section below)    
 │
 ├── outputs/
+|   ├── layers/        # Intermediate vector layers (corridors, AOI)
 │   └── figures/       # Maps, charts and visualisations
 │
 └── docs/
