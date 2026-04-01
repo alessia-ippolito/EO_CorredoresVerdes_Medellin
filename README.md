@@ -115,24 +115,28 @@ pip install -r requirements.txt
 
 ### Data
 
-Large raster files are **not** stored in this repository.  To reproduce the analysis:
-
+Large raster files are tracked with **Git LFS**. To clone the repository with all data:
+```bash
+git lfs install
+git clone https://github.com//medellin-green-corridors.git
+```
+To reproduce the analysis:
 1. Run `scripts/gee_data_export.js` in the [GEE Code Editor](https://code.earthengine.google.com/) to export Sentinel-2 and Landsat-8 composites to your Google Drive.
 2. Download the exported TIFFs and place them in `data/raw/`.
 3. Place the corridor and AOI shapefiles (`corridors_clippedAOI.gpkg`, `aoi.shp`) in `data/processed/`.
 
-Expected input files in `data/raw/`:
-
-```
-Medellin_Training_Optimal.csv
-Bogota_Test_Optimal.csv
-S2_Medellin_Texture_before.tif
-S2_Medellin_Texture_20.tif
-S2_Medellin_Texture_after.tif
-dem_medellin.tif
-thermal_Before.tif
-thermal_After.tif
-```
+File expected in data/:
+| File | Source | Description |
+|---|---|---|
+| `Medellin_Training_Optimal.csv` | GEE export | Training samples with spectral features |
+| `Bogota_Test_Optimal.csv` | GEE export | Test samples (generalization city) |
+| `S2_Medellin_Texture_before.tif` | GEE export | Sentinel-2 composite – pre-corridors (2015–2016) |
+| `S2_Medellin_Texture_after.tif` | GEE export | Sentinel-2 composite – post-corridors (2024–2025) |
+| `dem_medellin.tif` | GEE export | SRTM DEM 30 m |
+| `thermal_Before.tif` | GEE export | Landsat-8 ST_B10 – pre-corridors |
+| `thermal_After.tif` | GEE export | Landsat-8 ST_B10 – post-corridors |
+| `corridors_clippedAOI.gpkg` |Medellin municipality website + GIS| Green corridor polygons clipped to city extent |
+| `aoi.shp` | GEE export | City boundary shapefile |
 
 ### Run
 
