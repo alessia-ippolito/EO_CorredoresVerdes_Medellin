@@ -14,7 +14,7 @@ Medellín (Colombia) launched an ambitious urban reforestation programme known a
 | Satellite | Sentinel-2 MSI (Level-2A) + Landsat-8 OLI/TIRS |
 | Classification | Binary – Vegetation vs. Non-Vegetation |
 | Models | Random Forest (RF) · Support Vector Machine (SVM) |
-| Time periods | Before corridors · 2020 · After corridors |
+| Time periods | Before corridors · After corridors |
 | Generalization test | Bogotá (independent city) |
 
 ---
