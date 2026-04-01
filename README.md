@@ -81,7 +81,7 @@ Sentinel-2 (GEE)          Landsat-8 (GEE)
       │         Before vs. After
       ▼
   Full-image classification
-  Before / 2020 / After
+  Before / After
       │
       ▼
   Land cover change detection

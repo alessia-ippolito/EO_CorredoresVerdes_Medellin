@@ -318,7 +318,7 @@ for data, name in datasets:
 best_method_name = min(cv_scores, key=cv_scores.get)
 best_cv = cv_scores[best_method_name]
 
-print(f"\n→ Best spatial sampling method: '{best_method_name}' (CV = {best_cv:.4f})")
+print(f"\n-> Best spatial sampling method: '{best_method_name}' (CV = {best_cv:.4f})")
 print("  (lowest CV = most spatially uniform distribution)")
 
 # Map the selected method name to the corresponding DataFrame
@@ -522,6 +522,15 @@ def classify_raster(input_tif: str, output_tif: str, selected_features: list,
     -------
     dict with keys 'n_nonveg' and 'n_veg' (pixel counts per class)
     """
+    # Resolve relative input path against project root (script may be run
+    # with a different CWD). If the provided path doesn't exist, attempt
+    # to find it under the repository `data/` folder relative to this file.
+    if not os.path.isabs(input_tif) and not os.path.exists(input_tif):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidate = os.path.join(repo_root, input_tif)
+        if os.path.exists(candidate):
+            input_tif = candidate
+
     band_indices = [feature_cols_all.index(f) for f in selected_features]
 
     with rasterio.open(input_tif) as src:
@@ -595,7 +604,7 @@ def reproject_raster(src_path: str, dst_path: str,
                     dst_transform=transform, dst_crs=dst_crs,
                     resampling=Resampling.nearest
                 )
-    print(f"✓ Reprojected → {dst_path}")
+    print(f"Reprojected -> {dst_path}")
 
 
 def _fix_proj_path():
@@ -644,17 +653,17 @@ def calc_class_areas(raster_path: str, assume_nodata=None) -> pd.DataFrame:
 
 # -- Classify all three epochs ---
 print("\nClassifying Medellín images...")
-classify_raster("data/S2_Medellin_Texture_before.tif", "Classified_SVM_before.tif",
+classify_raster("data/S2_Medellin_Texture_before.tif", "outputs/layers/Classified_SVM_before.tif",
                 best_features_overall_svm, feature_cols, best_svm, scaler_robust)
-classify_raster("data/S2_Medellin_Texture_after.tif",  "Classified_SVM_after.tif",
+classify_raster("data/S2_Medellin_Texture_after.tif",  "outputs/layers/Classified_SVM_after.tif",
                 best_features_overall_svm, feature_cols, best_svm, scaler_robust)
 
 # Reproject to EPSG:3116 for metric area calculations
-reproject_raster("Classified_SVM_before.tif", "landcover_reprojected_before.tif")
-reproject_raster("Classified_SVM_after.tif",  "landcover_riproiettata.tif")
+reproject_raster("outputs/layers/Classified_SVM_before.tif", "outputs/layers/landcover_reprojected_before.tif")
+reproject_raster("outputs/layers/Classified_SVM_after.tif",  "outputs/layers/landcover_reprojected_after.tif")
 
-results_before = calc_class_areas("landcover_reprojected_before.tif")
-results_after  = calc_class_areas("landcover_riproiettata.tif")
+results_before = calc_class_areas("outputs/layers/landcover_reprojected_before.tif")
+results_after  = calc_class_areas("outputs/layers/landcover_reprojected_after.tif")
 
 df_change = results_before.merge(results_after, on="class", suffixes=("_before", "_after"))
 df_change["diff_km2"] = (df_change["area_km2_after"] - df_change["area_km2_before"])
@@ -662,7 +671,7 @@ df_change["pct_change"] = (
     (df_change["area_km2_after"] - df_change["area_km2_before"])
     / df_change["area_km2_before"] * 100
 )
-print("\nLand Cover Change (before → after):")
+print("\nLand Cover Change (before -> after):")
 print(df_change.to_string(index=False))
 
 # =============================================================================
@@ -670,10 +679,16 @@ print(df_change.to_string(index=False))
 # =============================================================================
 
 # Load the corridor polygons (clipped to the city AOI)
-corridors_shp = gpd.read_file("corridors_clippedAOI.gpkg")
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+corridors_fp = "data/corridors_clippedAOI.gpkg"
+if not os.path.exists(corridors_fp):
+    candidate = os.path.join(repo_root, corridors_fp)
+    if os.path.exists(candidate):
+        corridors_fp = candidate
+corridors_shp = gpd.read_file(corridors_fp)
 
 # Align CRS of the shapefile to the raster
-with rasterio.open("landcover_riproiettata.tif") as src:
+with rasterio.open("outputs/layers/landcover_reprojected_after.tif") as src:
     raster_crs = src.crs
 corridors_proj = corridors_shp.to_crs(raster_crs)
 
@@ -681,8 +696,8 @@ geoms = [g.__geo_interface__ for g in corridors_proj.geometry]
 
 # Clip classified rasters to corridor extent
 for in_tif, out_tif in [
-    ("landcover_riproiettata.tif",      "clipped_corr_after.tif"),
-    ("landcover_reprojected_before.tif", "clipped_corr_before.tif"),
+    ("outputs/layers/landcover_reprojected_after.tif",      "outputs/layers/clipped_corr_after.tif"),
+    ("outputs/layers/landcover_reprojected_before.tif", "outputs/layers/clipped_corr_before.tif"),
 ]:
     with rasterio.open(in_tif) as src:
         out_image, out_transform = rasterio.mask.mask(src, geoms, crop=True, nodata=255)
@@ -691,10 +706,10 @@ for in_tif, out_tif in [
                         width=out_image.shape[2], transform=out_transform, nodata=255)
     with rasterio.open(out_tif, "w", **out_meta) as dst:
         dst.write(out_image)
-    print(f"✓ Clipped corridors → {out_tif}")
+    print(f"Clipped corridors -> {out_tif}")
 
-areas_before_corr = calc_class_areas("clipped_corr_before.tif")
-areas_after_corr  = calc_class_areas("clipped_corr_after.tif")
+areas_before_corr = calc_class_areas("outputs/layers/clipped_corr_before.tif")
+areas_after_corr  = calc_class_areas("outputs/layers/clipped_corr_after.tif")
 df_corr_change    = areas_before_corr.merge(areas_after_corr, on="class",
                                             suffixes=("_before", "_after"))
 df_corr_change["diff_km2"] = (
@@ -762,23 +777,28 @@ def reproject_to_match(src_path: str, dst_path: str, reference_path: str,
                 dst_transform=dst_transform, dst_crs=dst_crs,
                 resampling=resampling
             )
-    print(f"✓ Aligned to reference grid → {dst_path}")
+    print(f"Aligned to reference grid -> {dst_path}")
 
 
 # Landsat-8 Collection-2 ST_B10 scaling coefficients (from MTL metadata)
 ML, AL = 0.00341802, 149.0
 
 # Reproject DEM and align thermal images to DEM grid
-reproject_raster("dem_medellin.tif", "dem_medellin_meters.tif")
-reproject_to_match("thermal_Before.tif", "thermal_Before_on_dem.tif", "dem_medellin_meters.tif")
-reproject_to_match("thermal_After.tif",  "thermal_After_on_dem.tif",  "dem_medellin_meters.tif")
+reproject_raster("data/dem_medellin.tif", "outputs/layers/dem_medellin_meters.tif")
+reproject_to_match("data/thermal_Before.tif", "outputs/layers/thermal_Before_on_dem.tif", "outputs/layers/dem_medellin_meters.tif")
+reproject_to_match("data/thermal_After.tif",  "outputs/layers/thermal_After_on_dem.tif",  "outputs/layers/dem_medellin_meters.tif")
 
-T1, _ = landsat_b10_to_celsius("thermal_Before_on_dem.tif", ML, AL)
-T2, _ = landsat_b10_to_celsius("thermal_After_on_dem.tif",  ML, AL)
+T1, _ = landsat_b10_to_celsius("outputs/layers/thermal_Before_on_dem.tif", ML, AL)
+T2, _ = landsat_b10_to_celsius("outputs/layers/thermal_After_on_dem.tif",  ML, AL)
 
 # Mask analysis to the city AOI
-aoi_gdf = gpd.read_file("aoi.shp")
-with rasterio.open("dem_medellin_meters.tif") as src:
+aoi_fp = "data/aoi.shp"
+if not os.path.exists(aoi_fp):
+    candidate = os.path.join(repo_root, aoi_fp)
+    if os.path.exists(candidate):
+        aoi_fp = candidate
+aoi_gdf = gpd.read_file(aoi_fp)
+with rasterio.open("outputs/layers/dem_medellin_meters.tif") as src:
     dem    = src.read(1)
     t_dem  = src.transform
     crs    = src.crs
@@ -800,9 +820,9 @@ print(f"Mean LST After  : {np.ma.mean(T2):.2f} °C")
 print(f"Mean LST Change : {np.ma.mean(diff):.2f} °C")
 
 # Save thermal difference raster
-with rasterio.open("dem_medellin_meters.tif") as src:
+with rasterio.open("outputs/layers/dem_medellin_meters.tif") as src:
     out_profile = src.profile.copy()
 out_profile.update(dtype=rasterio.float32, nodata=-9999, count=1)
-with rasterio.open("thermal_diff_on_dem.tif", "w", **out_profile) as dst:
+with rasterio.open("outputs/layers/thermal_diff_on_dem.tif", "w", **out_profile) as dst:
     dst.write(np.ma.filled(diff.astype(np.float32), -9999), 1)
-print("✓ Saved: thermal_diff_on_dem.tif")
+print("Saved: thermal_diff_on_dem.tif")
